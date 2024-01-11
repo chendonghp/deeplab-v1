@@ -5,9 +5,7 @@ import os
 import torch
 from torch.utils.data import Dataset
 from torchvision.io import read_image
-from train import VGG16_LargeFOV
-from torch.utils.data import DataLoader
-
+from PIL import Image
 
 
 colorDict = {
@@ -58,57 +56,10 @@ class LungImageDataset(Dataset):
     def __getitem__(self, idx):
         print(self.root, self.img_dir, self.im_list[idx])
         img_path = os.path.join(self.root, self.img_dir, self.im_list[idx])
-        image = read_image(img_path)
+        image = Image.open(img_path)
         label_path = os.path.join(self.root, self.label_dir, self.im_list[idx])
-        label = read_image(label_path)
+        label = Image.open(label_path)
         label = RGBtoOneHot(label, colorDict)
-        
-        # label = label.permute(1, 2, 0)
         if self.transform:
-            image = self.transform(image)
-        if self.target_transform:
-            label = self.target_transform(label)
+            image, label = self.transform(image, label)
         return image, label
-
-
-
-root = r"/mnt/d/GlassAI_data"
-
-train_ratio = 0.9
-size = 500
-train_size = int(size*train_ratio)
-train_range , val_range = (0,train_size), (train_size,size)
-train = LungImageDataset(root,  size=train_range)
-val = LungImageDataset(root, size=val_range)
-
-vgg=VGG16_LargeFOV(num_classes=len(colorDict.keys()))
-
-train = DataLoader(train, batch_size=50, shuffle=True)
-val = DataLoader(val, batch_size=50, shuffle=True)
-
-vgg.train(train_data=train, test_data=val)
-
-# d = LungImageDataset(root, size=(0, 500))
-
-
-# colors = {}
-# # Convert the list to a NumPy array for faster processing
-
-# from torch.utils.data import DataLoader
-
-# train_dataloader = DataLoader(d, batch_size=50, shuffle=False)
-
-# for im, label in train_dataloader:
-#     label = label.reshape(-1, 3)
-#     # Get unique RGB values and their counts
-#     uniques, counts = torch.unique(label, dim=0, return_counts=True)
-#     for unique, count in zip(uniques, counts):
-#         unique = str(unique)
-#         colors[unique] = colors.get(unique, 0) + count
-#     print(label.shape)
-
-# print(colors)
-
-
-# load images as dataset
-# train
