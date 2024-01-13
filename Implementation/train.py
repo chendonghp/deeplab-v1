@@ -71,10 +71,17 @@ class VGG16_LargeFOV:
     def save_train_log(
         self, epoch, i, num_batch, loss, test_loss, test_mIoU, save_path=None
     ):
-        # Initialize a DataFrame to store the logs
-        log_df = pd.DataFrame(
-            columns=["epoch", "iteration", "train_loss", "test_loss", "test_mIoU"]
+        log_csv_path = (
+            os.path.join(save_path, "vgg_largefov_training_log.csv")
+            if save_path
+            else "vgg_largefov_training_log.csv"
         )
+        if os.path.exists(save_path):
+            log_df = pd.read_csv(save_path)
+        else:
+            log_df = pd.DataFrame(
+                columns=["epoch", "iteration", "train_loss", "test_loss", "test_mIoU"]
+            )
         log_df = log_df.append(
             {
                 "epoch": epoch + 1,
@@ -87,11 +94,6 @@ class VGG16_LargeFOV:
             ignore_index=True,
         )
         # Save the DataFrame to a CSV file
-        log_csv_path = (
-            os.path.join(save_path, "vgg_largefov_training_log.csv")
-            if save_path
-            else "vgg_largefov_training_log.csv"
-        )
         log_df.to_csv(log_csv_path, index=False)
         print(f"Training log saved to {log_csv_path}.")
 
@@ -122,6 +124,7 @@ class VGG16_LargeFOV:
             if epoch % self.epoch_print == 0:
                 print("Epoch {} Started...".format(epoch + 1))
             for i, (X, y) in enumerate(train_data):
+                print(f"Iteration: {i}")
                 n, c, h, w = y.shape
                 y = y.view(n, h, w).type(torch.LongTensor)
 
@@ -143,7 +146,7 @@ class VGG16_LargeFOV:
                         epoch, i, num_batch, loss, test_loss, test_mIoU, log_path
                     )
                     # Create a SummaryWriter for logging
-                    writer = SummaryWriter(log_dir=f'{log_path}/vgg16_largefov')
+                    writer = SummaryWriter(log_dir=f"{log_path}/vgg16_largefov")
                     # log scalar values
                     step = epoch * num_batch + i
                     writer.add_scalar("Loss/train", loss.item(), step)
