@@ -76,8 +76,8 @@ class VGG16_LargeFOV:
             if save_path
             else "vgg_largefov_training_log.csv"
         )
-        if os.path.exists(save_path):
-            log_df = pd.read_csv(save_path)
+        if os.path.exists(log_csv_path):
+            log_df = pd.read_csv(log_csv_path)
         else:
             log_df = pd.DataFrame(
                 columns=["epoch", "iteration", "train_loss", "test_loss", "test_mIoU"]
