@@ -43,8 +43,8 @@ class VGG16_LargeFOV:
         self.epoch = 0
 
     # Assuming you have already initialized the model and optimizer
-    def load_checkpoint(self, load_path):
-        checkpoint = torch.load(load_path)
+    def load_checkpoint(self, load_path, model_name="vgg16_large_fov_latest"):
+        checkpoint = torch.load(os.path.join(load_path, f"{model_name}.pt"))
         self.model.load_state_dict(checkpoint["model_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.best_mIoU = checkpoint["best_mIoU"]
@@ -122,7 +122,7 @@ class VGG16_LargeFOV:
         for epoch in range(epochs):
             epoch += self.epoch
             if epoch % self.epoch_print == 0:
-                print("Epoch {} Started...".format(epoch + 1))
+                print("Epoch {} Started...".format(epoch))
             for i, (X, y) in enumerate(train_data):
                 print(f"Iteration: {i}")
                 n, c, h, w = y.shape
@@ -154,7 +154,7 @@ class VGG16_LargeFOV:
                     writer.add_scalar("mIoU/test", test_mIoU, step)
                     # writer.add_scalar("Accuracy/test", test_accuracy, step)
 
-                    state = f"Iteration : {i+1} - Train Loss : {loss.item():.6f}, Test Loss : {test_loss:.6f}, Test mIoU : {100 * test_mIoU:.4f}"
+                    state = f"Iteration : {i} - Train Loss : {loss.item():.6f}, Test Loss : {test_loss:.6f}, Test mIoU : {100 * test_mIoU:.4f}"
                     if test_mIoU > self.best_mIoU:
                         print("\n", "*" * 35, "Best mIoU Updated", "*" * 35)
                         print(state)
@@ -169,6 +169,13 @@ class VGG16_LargeFOV:
                         print()
                     else:
                         print(state)
+            self.save_checkpoint(
+                save_path=save_path,
+                loss=test_loss,
+                epoch=epoch,
+                it=i,
+                model_name="vgg16_large_fov_latest",
+            )
         # Close the SummaryWriter
         writer.close()
 
