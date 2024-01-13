@@ -57,7 +57,7 @@ class LungImageDataset(Dataset):
         return len(self.im_list)
 
     def __getitem__(self, idx) -> Tuple[Image.Image, Image.Image]:
-        print(self.root, self.img_dir, self.im_list[idx])
+        # print(self.root, self.img_dir, self.im_list[idx])
         img_path = os.path.join(self.root, self.img_dir, self.im_list[idx])
         image = Image.open(img_path)
         label_path = os.path.join(self.root, self.label_dir, self.im_list[idx])
