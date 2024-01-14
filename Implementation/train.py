@@ -1,5 +1,7 @@
 import itertools, model, utils
 
+import tensorboard
+
 from datetime import datetime
 import os
 
@@ -52,13 +54,13 @@ class VGG16_LargeFOV:
         print("Loaded model and optimizer from {}".format(load_path))
 
     def save_checkpoint(
-        self, save_path, loss, epoch, it, model_name="vgg16_large_fov_best"
+        self, save_path, loss, mIoU, epoch, it, model_name="vgg16_large_fov_best"
     ):
         # Save both the model state and the optimizer state
         save_dict = {
             "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
-            "best_mIoU": self.best_mIoU * 100,
+            "best_mIoU": mIoU * 100,
             "val_loss": loss,
             "epoch": epoch,
             "iter": it,
@@ -69,7 +71,7 @@ class VGG16_LargeFOV:
         print(f"Saved Best Model at {save_path}.")
 
     def save_train_log(
-        self, epoch, i, num_batch, loss, test_loss, test_mIoU, save_path=None
+        self, epoch, i, step, loss, test_loss, test_mIoU, save_path=None
     ):
         log_csv_path = (
             os.path.join(save_path, "vgg_largefov_training_log.csv")
@@ -84,9 +86,9 @@ class VGG16_LargeFOV:
             )
         log_df = log_df.append(
             {
-                "epoch": epoch + 1,
-                "iteration": i + 1,
-                "total_iter": epoch * num_batch + i + 1,
+                "epoch": epoch,
+                "iteration": i,
+                "total_iter": step,
                 "train_loss": loss.item(),
                 "test_loss": test_loss,
                 "test_mIoU": test_mIoU,
@@ -96,6 +98,14 @@ class VGG16_LargeFOV:
         # Save the DataFrame to a CSV file
         log_df.to_csv(log_csv_path, index=False)
         print(f"Training log saved to {log_csv_path}.")
+
+    def tensorboard_log(self, writer, step, loss, test_loss, test_mIoU):
+        # log scalar values
+        writer.add_scalar("Loss/train", loss.item(), step)
+        writer.add_scalar("Loss/test", test_loss, step)
+        writer.add_scalar("mIoU/test", test_mIoU, step)
+        # writer.add_scalar("Accuracy/test", test_accuracy, step)
+        return writer
 
     def train(
         self,
@@ -121,6 +131,7 @@ class VGG16_LargeFOV:
         self.model.train()
         for epoch in range(epochs):
             epoch += self.epoch
+            test_mIoU, test_loss = 0, 0
             if epoch % self.epoch_print == 0:
                 print("Epoch {} Started...".format(epoch))
             for i, (X, y) in enumerate(train_data):
@@ -145,35 +156,32 @@ class VGG16_LargeFOV:
                     self.save_train_log(
                         epoch, i, num_batch, loss, test_loss, test_mIoU, log_path
                     )
-                    # Create a SummaryWriter for logging
-                    writer = SummaryWriter(log_dir=f"{log_path}/vgg16_largefov")
-                    # log scalar values
+                    writer = SummaryWriter(log_dir=f"{log_path}/runs")
                     step = epoch * num_batch + i
-                    writer.add_scalar("Loss/train", loss.item(), step)
-                    writer.add_scalar("Loss/test", test_loss, step)
-                    writer.add_scalar("mIoU/test", test_mIoU, step)
-                    # writer.add_scalar("Accuracy/test", test_accuracy, step)
-
+                    writer = self.tensorboard_log(
+                        writer, step, loss, test_loss, test_mIoU
+                    )
                     state = f"Iteration : {i} - Train Loss : {loss.item():.6f}, Test Loss : {test_loss:.6f}, Test mIoU : {100 * test_mIoU:.4f}"
                     if test_mIoU > self.best_mIoU:
                         print("\n", "*" * 35, "Best mIoU Updated", "*" * 35)
                         print(state)
                         self.best_mIoU = test_mIoU
-                        if save_path:
-                            self.save_checkpoint(
-                                save_path=save_path,
-                                loss=test_loss,
-                                epoch=epoch,
-                                it=i,
-                            )
+                        self.save_checkpoint(
+                            save_path=save_path,
+                            loss=test_loss,
+                            mIoU=test_mIoU,
+                            epoch=epoch,
+                            it=i,
+                        )
                         print()
                     else:
                         print(state)
             self.save_checkpoint(
                 save_path=save_path,
                 loss=test_loss,
+                mIoU=test_mIoU,
                 epoch=epoch,
-                it=i,
+                it=epoch,
                 model_name="vgg16_large_fov_latest",
             )
         # Close the SummaryWriter
