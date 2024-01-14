@@ -62,13 +62,13 @@ class VGG16_LargeFOV:
             "optimizer_state_dict": self.optimizer.state_dict(),
             "best_mIoU": mIoU * 100,
             "val_loss": loss,
-            "epoch": epoch,
+            "epoch": epoch+1,
             "iter": it,
             "time": datetime.now(),
         }
         save_path = os.path.join(save_path, f"{model_name}.pt")
         torch.save(save_dict, save_path)
-        print(f"Saved Best Model at {save_path}.")
+        print(f"Saved Model at {save_path}.")
 
     def save_train_log(
         self, epoch, i, step, loss, test_loss, test_mIoU, save_path=None
