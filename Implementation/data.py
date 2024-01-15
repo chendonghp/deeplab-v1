@@ -21,6 +21,7 @@ colorDict = OrderedDict(
     }
 )
 
+
 # https://medium.com/@noah.vandal/creating-a-label-class-matrix-from-an-rgb-mask-for-segmentation-training-in-python-2ddceba459cb
 def rgb2onehot(im: NDArray, colorDict: dict) -> NDArray:
     arr = np.zeros(im.shape[:2])  ## rgb shape: (3,h,w); arr shape: (h,w)
@@ -67,3 +68,6 @@ class LungImageDataset(Dataset):
         if self.transform:
             image, label = self.transform(image, label)
         return image, label
+
+
+print("test")
