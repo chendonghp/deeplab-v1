@@ -32,6 +32,13 @@ def rgb2onehot(im: NDArray, colorDict: dict) -> NDArray:
     return arr
 
 
+def onehot2rgb(im: NDArray, colorDict: dict) -> NDArray:
+    arr = np.empty((*im.shape, 3))
+    for label, color in enumerate(colorDict.values()):
+        arr[im == np.asarray(label)] = np.asarray(color)
+    return arr.astype(np.uint8)
+
+
 class LungImageDataset(Dataset):
     def __init__(
         self,

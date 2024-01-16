@@ -3,7 +3,7 @@
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import unittest
 import numpy as np
-from Implementation.data import rgb2onehot, colorDict
+from Implementation.data import rgb2onehot, onehot2rgb, colorDict
 
 
 class DataTestCase(unittest.TestCase):
@@ -33,6 +33,13 @@ class DataTestCase(unittest.TestCase):
             np.all(label_map_2d == rgb2onehot(label_map_3d, colorDict)),
             "The label is not match!",
         )
+
+    def test_onehot2rgb(self):
+        mask_3d = np.asarray(
+            [[[255, 255, 255], [0, 255, 0]], [[0, 0, 255], [255, 255, 0]]]
+        )
+        mask_2d = np.asarray([[0, 1], [2, 3]])
+        self.assertTrue(np.all(onehot2rgb(mask_2d, colorDict) == mask_3d))
 
 
 if __name__ == "__main__":
