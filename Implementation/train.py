@@ -22,23 +22,23 @@ class VGG16_LargeFOV:
         num_classes,
         init_weights=False,
         ignore_index=-100,
-        gpu_id=0,
+        use_gpu=False,
+        device=None,
         print_freq=10,
         epoch_print=10,
     ):
         self.num_classes = num_classes
-
+        self.use_gpu = use_gpu
+        self.device = device
         self.ignore_index = ignore_index
-        self.gpu = gpu_id
         self.print_freq = print_freq
         self.epoch_print = epoch_print
 
-        torch.cuda.set_device(self.gpu)
-
-        self.loss_function = nn.CrossEntropyLoss(ignore_index=self.ignore_index).cuda(
-            self.gpu
-        )
-        self.model = model.VGG16_LargeFOV(self.num_classes, init_weights).cuda(self.gpu)
+        self.loss_function = nn.CrossEntropyLoss(ignore_index=self.ignore_index)
+        self.model = model.VGG16_LargeFOV(self.num_classes, init_weights)
+        if self.use_gpu:
+            self.model.to(self.device)
+            self.loss_function = self.loss_function.to(self.device)
         self.optimizer = None
         self.eps = 1e-10
         self.best_mIoU = 0.0
@@ -62,7 +62,7 @@ class VGG16_LargeFOV:
             "optimizer_state_dict": self.optimizer.state_dict(),
             "best_mIoU": mIoU * 100,
             "val_loss": loss,
-            "epoch": epoch+1,
+            "epoch": epoch + 1,
             "iter": it,
             "time": datetime.now(),
         }
@@ -84,17 +84,19 @@ class VGG16_LargeFOV:
             log_df = pd.DataFrame(
                 columns=["epoch", "iteration", "train_loss", "test_loss", "test_mIoU"]
             )
-        log_df = log_df.append(
+        new_row = pd.DataFrame(
             {
-                "epoch": epoch,
-                "iteration": i,
-                "total_iter": step,
-                "train_loss": loss.item(),
-                "test_loss": test_loss,
-                "test_mIoU": test_mIoU,
-            },
-            ignore_index=True,
+                "epoch": [epoch],
+                "iteration": [i],
+                "total_iter": [step],
+                "train_loss": [loss.item()],
+                "test_loss": [test_loss],
+                "test_mIoU": [test_mIoU],
+            }
         )
+
+        log_df = pd.concat([log_df, new_row], ignore_index=True)
+
         # Save the DataFrame to a CSV file
         log_df.to_csv(log_csv_path, index=False)
         print(f"Training log saved to {log_csv_path}.")
@@ -109,8 +111,8 @@ class VGG16_LargeFOV:
 
     def train(
         self,
-        train_data,
-        test_data,
+        train_loader,
+        test_loader,
         load_path=None,
         save_path=None,
         log_path="/content/drive/MyDrive",
@@ -123,7 +125,7 @@ class VGG16_LargeFOV:
         self.optimizer = optim.SGD(
             self.model.parameters(), lr, momentum=momentum, weight_decay=weight_decay
         )
-        num_batch = len(train_data)
+        num_batch = len(train_loader)
         if load_path:
             self.load_checkpoint(load_path)
             epochs = epochs - self.epoch
@@ -134,14 +136,13 @@ class VGG16_LargeFOV:
             test_mIoU, test_loss = 0, 0
             if epoch % self.epoch_print == 0:
                 print("Epoch {} Started...".format(epoch))
-            for i, (X, y) in enumerate(train_data):
-                print(f"Iteration: {i}")
+            for i, (X, y) in enumerate(train_loader):
                 n, c, h, w = y.shape
                 y = y.view(n, h, w).type(torch.LongTensor)
-
-                X, y = X.cuda(self.gpu, non_blocking=True), y.cuda(
-                    self.gpu, non_blocking=True
-                )
+                if self.use_gpu:
+                    X, y = X.to(self.device, non_blocking=True), y.to(
+                        self.device, non_blocking=True
+                    )
                 output = self.model(X)
                 output = F.resize(output, (h, w), Image.BILINEAR)
 
@@ -151,31 +152,29 @@ class VGG16_LargeFOV:
                 loss.backward()
                 self.optimizer.step()
 
+                test_mIoU, test_loss = self.test(test_loader)
+                self.save_train_log(
+                    epoch, i, num_batch, loss, test_loss, test_mIoU, log_path
+                )
+                writer = SummaryWriter(log_dir=f"{log_path}/runs")
+                step = epoch * num_batch + i
+                writer = self.tensorboard_log(writer, step, loss, test_loss, test_mIoU)
+                state = f"Iteration : {i} - Train Loss : {loss.item():.6f}, Test Loss : {test_loss:.6f}, Test mIoU : {100 * test_mIoU:.4f}"
                 if (i + 1) % self.print_freq == 0:
-                    test_mIoU, test_loss = self.test(test_data)
-                    self.save_train_log(
-                        epoch, i, num_batch, loss, test_loss, test_mIoU, log_path
+                    print(state)
+                if test_mIoU > self.best_mIoU:
+                    print("\n", "*" * 35, "Best mIoU Updated", "*" * 35)
+                    print(state)
+                    self.best_mIoU = test_mIoU
+                    self.save_checkpoint(
+                        save_path=save_path,
+                        loss=test_loss,
+                        mIoU=test_mIoU,
+                        epoch=epoch,
+                        it=i,
                     )
-                    writer = SummaryWriter(log_dir=f"{log_path}/runs")
-                    step = epoch * num_batch + i
-                    writer = self.tensorboard_log(
-                        writer, step, loss, test_loss, test_mIoU
-                    )
-                    state = f"Iteration : {i} - Train Loss : {loss.item():.6f}, Test Loss : {test_loss:.6f}, Test mIoU : {100 * test_mIoU:.4f}"
-                    if test_mIoU > self.best_mIoU:
-                        print("\n", "*" * 35, "Best mIoU Updated", "*" * 35)
-                        print(state)
-                        self.best_mIoU = test_mIoU
-                        self.save_checkpoint(
-                            save_path=save_path,
-                            loss=test_loss,
-                            mIoU=test_mIoU,
-                            epoch=epoch,
-                            it=i,
-                        )
-                        print()
-                    else:
-                        print(state)
+                    print()
+
             self.save_checkpoint(
                 save_path=save_path,
                 loss=test_loss,
@@ -188,9 +187,13 @@ class VGG16_LargeFOV:
         writer.close()
 
     def test(self, test_data):
-        tps = torch.zeros(self.num_classes).cuda(self.gpu, non_blocking=True)
-        fps = torch.zeros(self.num_classes).cuda(self.gpu, non_blocking=True)
-        fns = torch.zeros(self.num_classes).cuda(self.gpu, non_blocking=True)
+        tps = torch.zeros(self.num_classes)
+        fps = torch.zeros(self.num_classes)
+        fns = torch.zeros(self.num_classes)
+        if self.use_gpu:
+            tps = tps.to(self.device)
+            fps = fps.to(self.device)
+            fns = fns.to(self.device)
         losses = list()
 
         self.model.eval()
@@ -198,17 +201,19 @@ class VGG16_LargeFOV:
             for i, (X, y) in enumerate(test_data):
                 n, c, h, w = y.shape
                 y = y.view(n, h, w).type(torch.LongTensor)
-
-                X, y = X.cuda(self.gpu, non_blocking=True), y.cuda(
-                    self.gpu, non_blocking=True
-                )
+                if self.use_gpu:
+                    X, y = X.to(self.device, non_blocking=True), y.to(
+                        self.device, non_blocking=True
+                    )
                 output = self.model(X)
                 output = F.resize(output, (h, w), Image.BILINEAR)
 
                 loss = self.loss_function(output, y)
                 losses.append(loss.item())
 
-                tp, fp, fn = utils.mIoU(output, y, self.num_classes, self.gpu)
+                tp, fp, fn = utils.mIoU(
+                    output, y, self.num_classes, self.use_gpu, self.device
+                )
                 tps += tp
                 fps += fp
                 fns += fn
