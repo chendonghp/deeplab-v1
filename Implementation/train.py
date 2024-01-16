@@ -54,13 +54,14 @@ class VGG16_LargeFOV:
         print("Loaded model and optimizer from {}".format(load_path))
 
     def save_checkpoint(
-        self, save_path, loss, mIoU, epoch, it, model_name="vgg16_large_fov_best"
+        self, save_path, loss, mIoU, mpa, epoch, it, model_name="vgg16_large_fov_best"
     ):
         # Save both the model state and the optimizer state
         save_dict = {
             "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
             "best_mIoU": mIoU * 100,
+            "mpa": mpa * 100,
             "val_loss": loss,
             "epoch": epoch + 1,
             "iter": it,
@@ -71,7 +72,7 @@ class VGG16_LargeFOV:
         print(f"Saved Model at {save_path}.")
 
     def save_train_log(
-        self, epoch, i, step, loss, test_loss, test_mIoU, save_path=None
+        self, epoch, i, step, loss, test_loss, test_mIoU, test_mpa, save_path=None
     ):
         log_csv_path = (
             os.path.join(save_path, "vgg_largefov_training_log.csv")
@@ -82,7 +83,14 @@ class VGG16_LargeFOV:
             log_df = pd.read_csv(log_csv_path)
         else:
             log_df = pd.DataFrame(
-                columns=["epoch", "iteration", "train_loss", "test_loss", "test_mIoU"]
+                columns=[
+                    "epoch",
+                    "iteration",
+                    "train_loss",
+                    "test_loss",
+                    "test_mIoU",
+                    "test_mpa",
+                ]
             )
         new_row = pd.DataFrame(
             {
@@ -92,6 +100,7 @@ class VGG16_LargeFOV:
                 "train_loss": [loss.item()],
                 "test_loss": [test_loss],
                 "test_mIoU": [test_mIoU],
+                "test_mpa": [test_mpa],
             }
         )
 
@@ -101,11 +110,12 @@ class VGG16_LargeFOV:
         log_df.to_csv(log_csv_path, index=False)
         print(f"Training log saved to {log_csv_path}.")
 
-    def tensorboard_log(self, writer, step, loss, test_loss, test_mIoU):
+    def tensorboard_log(self, writer, step, loss, test_loss, test_mIoU, test_mpa):
         # log scalar values
         writer.add_scalar("Loss/train", loss.item(), step)
         writer.add_scalar("Loss/test", test_loss, step)
         writer.add_scalar("mIoU/test", test_mIoU, step)
+        writer.add_scalar("mpa/test", test_mpa, step)
         # writer.add_scalar("Accuracy/test", test_accuracy, step)
         return writer
 
@@ -152,14 +162,16 @@ class VGG16_LargeFOV:
                 loss.backward()
                 self.optimizer.step()
 
-                test_mIoU, test_loss = self.test(test_loader)
+                test_mIoU, test_loss, test_mpa = self.test(test_loader)
                 self.save_train_log(
-                    epoch, i, num_batch, loss, test_loss, test_mIoU, log_path
+                    epoch, i, num_batch, loss, test_loss, test_mIoU, test_mpa, log_path
                 )
                 writer = SummaryWriter(log_dir=f"{log_path}/runs")
                 step = epoch * num_batch + i
-                writer = self.tensorboard_log(writer, step, loss, test_loss, test_mIoU)
-                state = f"Iteration : {i} - Train Loss : {loss.item():.6f}, Test Loss : {test_loss:.6f}, Test mIoU : {100 * test_mIoU:.4f}"
+                writer = self.tensorboard_log(
+                    writer, step, loss, test_loss, test_mIoU, test_mpa
+                )
+                state = f"Iteration : {i} - Train Loss : {loss.item():.6f}, Test Loss : {test_loss:.6f}, Test mIoU : {100 * test_mIoU:.4f}, Test mpa : {100 * test_mpa:.4f}"
                 if (i + 1) % self.print_freq == 0:
                     print(state)
                 if test_mIoU > self.best_mIoU:
@@ -170,6 +182,7 @@ class VGG16_LargeFOV:
                         save_path=save_path,
                         loss=test_loss,
                         mIoU=test_mIoU,
+                        mpa=test_mpa,
                         epoch=epoch,
                         it=i,
                     )
@@ -179,6 +192,7 @@ class VGG16_LargeFOV:
                 save_path=save_path,
                 loss=test_loss,
                 mIoU=test_mIoU,
+                mpa=test_mpa,
                 epoch=epoch,
                 it=epoch,
                 model_name="vgg16_large_fov_latest",
@@ -194,8 +208,9 @@ class VGG16_LargeFOV:
             tps = tps.to(self.device)
             fps = fps.to(self.device)
             fns = fns.to(self.device)
-        losses = list()
-
+        losses = []
+        avg_miou = []
+        avg_mpa = []
         self.model.eval()
         with torch.no_grad():
             for i, (X, y) in enumerate(test_data):
@@ -211,12 +226,17 @@ class VGG16_LargeFOV:
                 loss = self.loss_function(output, y)
                 losses.append(loss.item())
 
-                tp, fp, fn = utils.mIoU(
+                tp, fp, fn = utils.metrics(
                     output, y, self.num_classes, self.use_gpu, self.device
                 )
-                tps += tp
-                fps += fp
-                fns += fn
-        self.model.train()
-        mIoU = torch.sum(tps / (self.eps + tps + fps + fns)) / self.num_classes
-        return (mIoU.item(), sum(losses) / len(losses))
+                miou = torch.mean(tp / (self.eps + tp + fp + fn))
+                avg_miou.append(miou.item())
+                mpa = torch.mean(tp / (self.eps + tp + fn))
+                avg_mpa.append(mpa.item())
+                # tps += tp
+                # fps += fp
+                # fns += fn
+        # self.model.train()
+        # mIoU = torch.sum(tps / (self.eps + tps + fps + fns)) / self.num_classes
+        iou, loss, pa = [sum(v) / len(v) for v in [avg_miou, losses, avg_mpa]]
+        return iou, loss, pa
