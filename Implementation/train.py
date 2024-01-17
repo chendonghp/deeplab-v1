@@ -25,16 +25,11 @@ class VGG16_LargeFOV:
         ignore_index=-100,
         use_gpu=False,
         device=None,
-        print_freq=10,
-        epoch_print=10,
     ):
         self.num_classes = num_classes
         self.use_gpu = use_gpu
         self.device = device
         self.ignore_index = ignore_index
-        self.print_freq = print_freq
-        self.epoch_print = epoch_print
-
         self.loss_function = nn.CrossEntropyLoss(ignore_index=self.ignore_index)
         self.model = model.VGG16_LargeFOV(self.num_classes, init_weights)
         if self.use_gpu:
@@ -55,7 +50,7 @@ class VGG16_LargeFOV:
         print("Loaded model and optimizer from {}".format(load_path))
 
     async def save_checkpoint(
-        self, save_path, loss, mIoU, mpa, epoch, it, model_name="vgg16_large_fov_best"
+        self, save_path, loss, mIoU, mpa, epoch, model_name="vgg16_large_fov_best"
     ):
         # Save both the model state and the optimizer state
         save_dict = {
@@ -65,7 +60,6 @@ class VGG16_LargeFOV:
             "mpa": mpa * 100,
             "val_loss": loss,
             "epoch": epoch + 1,
-            "iter": it,
             "time": datetime.now(),
         }
         save_path = os.path.join(save_path, f"{model_name}.pt")
@@ -73,7 +67,7 @@ class VGG16_LargeFOV:
         print(f"Saved Model at {save_path}.")
 
     async def save_train_log(
-        self, epoch, i, step, loss, test_loss, test_mIoU, test_mpa, save_path=None
+        self, epoch, loss, test_loss, test_mIoU, test_mpa, save_path=None
     ):
         log_csv_path = (
             os.path.join(save_path, "vgg_largefov_training_log.csv")
@@ -86,7 +80,6 @@ class VGG16_LargeFOV:
             log_df = pd.DataFrame(
                 columns=[
                     "epoch",
-                    "iteration",
                     "train_loss",
                     "test_loss",
                     "test_mIoU",
@@ -96,8 +89,6 @@ class VGG16_LargeFOV:
         new_row = pd.DataFrame(
             {
                 "epoch": [epoch],
-                "iteration": [i],
-                "total_iter": [step],
                 "train_loss": [loss.item()],
                 "test_loss": [test_loss],
                 "test_mIoU": [test_mIoU],
@@ -128,6 +119,7 @@ class VGG16_LargeFOV:
         save_path=None,
         log_path="/content/drive/MyDrive",
         epochs=1,
+        test_freq=10,
         lr=0.01,
         momentum=0.9,
         weight_decay=0.0005,
@@ -136,17 +128,15 @@ class VGG16_LargeFOV:
         self.optimizer = optim.SGD(
             self.model.parameters(), lr, momentum=momentum, weight_decay=weight_decay
         )
-        num_batch = len(train_loader)
         if load_path:
             self.load_checkpoint(load_path)
             epochs = epochs - self.epoch
         # set model in training mode, enables the training-specific operations such as dropout and batch normalization
         self.model.train()
+        print("Train Started: ", "\n")
         for epoch in range(epochs):
             epoch += self.epoch
             test_mIoU, test_loss = 0, 0
-            if epoch % self.epoch_print == 0:
-                print("Epoch {} Started...".format(epoch))
             for i, (X, y) in enumerate(train_loader):
                 n, c, h, w = y.shape
                 y = y.view(n, h, w).type(torch.LongTensor)
@@ -163,39 +153,36 @@ class VGG16_LargeFOV:
                 loss.backward()
                 self.optimizer.step()
 
-                test_mIoU, test_loss, test_mpa = self.test(test_loader)
-                await self.save_train_log(
-                    epoch, i, num_batch, loss, test_loss, test_mIoU, test_mpa, log_path
-                )
-                writer = SummaryWriter(log_dir=f"{log_path}/runs")
-                step = epoch * num_batch + i
-                writer = self.tensorboard_log(
-                    writer, step, loss, test_loss, test_mIoU, test_mpa
-                )
-                state = f"Iteration : {i} - Train Loss : {loss.item():.6f}, Test Loss : {test_loss:.6f}, Test mIoU : {100 * test_mIoU:.4f}, Test mpa : {100 * test_mpa:.4f}"
-                if (i + 1) % self.print_freq == 0:
-                    print(state)
-                if test_mIoU > self.best_mIoU:
-                    print("\n", "*" * 35, "Best mIoU Updated", "*" * 35)
-                    print(state)
-                    self.best_mIoU = test_mIoU
-                    await self.save_checkpoint(
-                        save_path=save_path,
-                        loss=test_loss,
-                        mIoU=test_mIoU,
-                        mpa=test_mpa,
-                        epoch=epoch,
-                        it=i,
-                    )
-                    print()
+                if i % test_freq == 0:
+                    test_mIoU, test_loss, test_mpa = self.test(test_loader)
 
+                    writer = SummaryWriter(log_dir=f"{log_path}/runs")
+                    writer = self.tensorboard_log(
+                        writer, epoch, loss, test_loss, test_mIoU, test_mpa
+                    )
+                    state = f"Epoch : {epoch} Iter : {i} - Train Loss : {loss.item():.6f}, Test Loss : {test_loss:.6f}, Test mIoU : {100 * test_mIoU:.4f}, Test mpa : {100 * test_mpa:.4f}"
+                    print(state)
+                    if test_mIoU > self.best_mIoU:
+                        print("\n", "*" * 35, "Best mIoU Updated", "*" * 35)
+                        print(state)
+                        self.best_mIoU = test_mIoU
+                        await self.save_checkpoint(
+                            save_path=save_path,
+                            loss=test_loss,
+                            mIoU=test_mIoU,
+                            mpa=test_mpa,
+                            epoch=epoch,
+                        )
+                        print()
+                    await self.save_train_log(
+                        epoch, loss, test_loss, test_mIoU, test_mpa, log_path
+                    )
             await self.save_checkpoint(
                 save_path=save_path,
                 loss=test_loss,
                 mIoU=test_mIoU,
                 mpa=test_mpa,
                 epoch=epoch,
-                it=epoch,
                 model_name="vgg16_large_fov_latest",
             )
         # Close the SummaryWriter
