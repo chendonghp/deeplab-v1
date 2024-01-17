@@ -1,12 +1,15 @@
 import torch
 import torchvision
 import torchvision.transforms.functional as F
+import torchvision.transforms as transforms
 
 from PIL import Image
 
 import math
 import numbers
 from collections.abc import Sequence
+import numpy as np
+from numpy._typing import NDArray
 
 
 class Mask_Aug:
@@ -19,7 +22,7 @@ class Mask_Aug:
         return image, mask
 
 
-class ToTensor:
+class Image2Tensor:
     """
     Converts a PIL Image or numpy.ndarray (H x W x C) in the range [0, 255] to a torch.FloatTensor of shape (C x H x W) in the range [0.0, 1.0].
     Only applied to image not mask.
@@ -29,24 +32,29 @@ class ToTensor:
         return F.to_tensor(image), mask
 
 
-class PILToTensor_img:
+class PILImage2Tensor:
     """
-    Converts a PIL Image (H x W x C) to a Tensor of shape (C x H x W).
+    Converts a PIL Image (H x W x C) to a Tensor of shape (C x H x W). uint8 t0 float32
     Only applied to image not mask.
     """
 
     def __call__(self, image, mask):
-        return F.pil_to_tensor(image), mask
+        transform = transforms.ToTensor()
+        return transform(image), mask
 
 
-class PILToTensor:
+class PILMask2Tensor:
     """
-    Converts a PIL Image (H x W x C) to a Tensor of shape (C x H x W).
+    covert PIL mask image to torch tensor, keep 0-255 range,
+    # Converts a PIL Image (H x W x C) to a Tensor of shape (C x H x W).
     Only applied to mask not image.
+
     """
 
-    def __call__(self, image, mask):
-        return image, F.pil_to_tensor(mask)
+    def __call__(self, image, mask: NDArray):
+        mask = np.asarray(mask)
+        mask = np.expand_dims(mask, axis=0)
+        return image, torch.from_numpy(mask)
 
 
 class ToPILImage:

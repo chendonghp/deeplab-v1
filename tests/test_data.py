@@ -2,8 +2,12 @@
 # import os
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import unittest
+
 import numpy as np
-from Implementation.data import rgb2onehot, onehot2rgb, colorDict
+import torch
+from torch.utils.data import DataLoader
+
+from Implementation.data import colorDict, compute_mean_std, onehot2rgb, rgb2onehot
 
 
 class DataTestCase(unittest.TestCase):
@@ -40,6 +44,21 @@ class DataTestCase(unittest.TestCase):
         )
         mask_2d = np.asarray([[0, 1], [2, 3]])
         self.assertTrue(np.all(onehot2rgb(mask_2d, colorDict) == mask_3d))
+
+    def test_compute_mean_std(self):
+        # Create a dummy DataLoader with mock data
+        mock_data = [(torch.randn(3, 32, 32), torch.zeros([1])) for _ in range(10)]
+        mock_dataloader = DataLoader(mock_data, batch_size=1, shuffle=False)
+
+        # Call the function to compute mean and std
+        mean, std = compute_mean_std(mock_dataloader)
+
+        # Assert the expected mean and std values
+        expected_mean = torch.zeros(3)  # Replace with your expected mean values
+        expected_std = torch.ones(3)  # Replace with your expected std values
+        print(mean, std)
+        self.assertTrue(torch.allclose(mean, expected_mean, atol=5e-2))
+        self.assertTrue(torch.allclose(std, expected_std, atol=5e-2))
 
 
 if __name__ == "__main__":

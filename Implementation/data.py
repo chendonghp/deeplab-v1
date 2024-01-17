@@ -1,10 +1,10 @@
 # get dir sort file name, get first 12000 images
 
-from typing import Tuple
+from typing import Tuple, Dict
 import os
 from collections import OrderedDict
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from torchvision.io import read_image
 from PIL import Image
 import numpy as np
@@ -39,6 +39,18 @@ def onehot2rgb(im: NDArray, colorDict: dict) -> NDArray:
     return arr.astype(np.uint8)
 
 
+def compute_mean_std(dataloader: DataLoader) -> Tuple:
+    mean_rgb = []
+    std_rgb = []
+    for ims, _ in dataloader:
+        ims = ims.float()
+        mean_rgb.append(ims.mean(axis=(0, 2, 3)))
+        std_rgb.append(ims.std(axis=(0, 2, 3)))  # stdf 计算只是一种近似
+    mean = torch.stack(mean_rgb).mean(dim=0)
+    std = torch.stack(std_rgb).mean(dim=0)
+    return mean, std
+
+
 class LungImageDataset(Dataset):
     def __init__(
         self,
@@ -59,21 +71,25 @@ class LungImageDataset(Dataset):
         if size:
             self.im_list = self.im_list[size[0] : size[1]]
         self.transform = transform
-        self.target_transform = target_transform
+        # self.target_transform = target_transform
 
     def __len__(self):
         return len(self.im_list)
 
-    def __getitem__(self, idx) -> Tuple[Image.Image, Image.Image]:
+    def __getitem__(self, idx) -> Tuple[NDArray, NDArray]:
         # print(self.root, self.img_dir, self.im_list[idx])
         img_path = os.path.join(self.root, self.img_dir, self.im_list[idx])
         image = Image.open(img_path)
+        image = np.array(image)
         label_path = os.path.join(self.root, self.label_dir, self.im_list[idx])
         label = Image.open(label_path)
         label = np.asarray(label)
-        label = Image.fromarray(rgb2onehot(label, colorDict))
+        label = rgb2onehot(label, colorDict)
+        label = np.expand_dims(label, axis=-1)
         if self.transform:
-            image, label = self.transform(image, label)
+            transformed = self.transform(image=image, mask=label)
+            image = transformed["image"]
+            label = transformed["mask"]
         return image, label
 
 
