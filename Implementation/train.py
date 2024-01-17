@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision.transforms.functional as F
 from torch.utils.tensorboard import SummaryWriter
+import asyncio
 
 
 class VGG16_LargeFOV:
@@ -53,7 +54,7 @@ class VGG16_LargeFOV:
         self.epoch = checkpoint["epoch"]
         print("Loaded model and optimizer from {}".format(load_path))
 
-    def save_checkpoint(
+    async def save_checkpoint(
         self, save_path, loss, mIoU, mpa, epoch, it, model_name="vgg16_large_fov_best"
     ):
         # Save both the model state and the optimizer state
@@ -68,10 +69,10 @@ class VGG16_LargeFOV:
             "time": datetime.now(),
         }
         save_path = os.path.join(save_path, f"{model_name}.pt")
-        torch.save(save_dict, save_path)
+        await asyncio.to_thread(torch.save, save_dict, save_path)
         print(f"Saved Model at {save_path}.")
 
-    def save_train_log(
+    async def save_train_log(
         self, epoch, i, step, loss, test_loss, test_mIoU, test_mpa, save_path=None
     ):
         log_csv_path = (
@@ -80,7 +81,7 @@ class VGG16_LargeFOV:
             else "vgg_largefov_training_log.csv"
         )
         if os.path.exists(log_csv_path):
-            log_df = pd.read_csv(log_csv_path)
+            log_df = await asyncio.to_thread(pd.read_csv, log_csv_path)
         else:
             log_df = pd.DataFrame(
                 columns=[
@@ -107,7 +108,7 @@ class VGG16_LargeFOV:
         log_df = pd.concat([log_df, new_row], ignore_index=True)
 
         # Save the DataFrame to a CSV file
-        log_df.to_csv(log_csv_path, index=False)
+        await asyncio.to_thread(log_df.to_csv, log_csv_path, index=False)
         print(f"Training log saved to {log_csv_path}.")
 
     def tensorboard_log(self, writer, step, loss, test_loss, test_mIoU, test_mpa):
@@ -119,7 +120,7 @@ class VGG16_LargeFOV:
         # writer.add_scalar("Accuracy/test", test_accuracy, step)
         return writer
 
-    def train(
+    async def train(
         self,
         train_loader,
         test_loader,
@@ -163,7 +164,7 @@ class VGG16_LargeFOV:
                 self.optimizer.step()
 
                 test_mIoU, test_loss, test_mpa = self.test(test_loader)
-                self.save_train_log(
+                await self.save_train_log(
                     epoch, i, num_batch, loss, test_loss, test_mIoU, test_mpa, log_path
                 )
                 writer = SummaryWriter(log_dir=f"{log_path}/runs")
@@ -178,7 +179,7 @@ class VGG16_LargeFOV:
                     print("\n", "*" * 35, "Best mIoU Updated", "*" * 35)
                     print(state)
                     self.best_mIoU = test_mIoU
-                    self.save_checkpoint(
+                    await self.save_checkpoint(
                         save_path=save_path,
                         loss=test_loss,
                         mIoU=test_mIoU,
@@ -188,7 +189,7 @@ class VGG16_LargeFOV:
                     )
                     print()
 
-            self.save_checkpoint(
+            await self.save_checkpoint(
                 save_path=save_path,
                 loss=test_loss,
                 mIoU=test_mIoU,
