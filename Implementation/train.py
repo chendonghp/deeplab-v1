@@ -158,7 +158,12 @@ class VGG16_LargeFOV:
 
                     writer = SummaryWriter(log_dir=f"{log_path}/runs")
                     writer = self.tensorboard_log(
-                        writer, epoch, loss, test_loss, test_mIoU, test_mpa
+                        writer,
+                        epoch * len(train_loader) + i,
+                        loss,
+                        test_loss,
+                        test_mIoU,
+                        test_mpa,
                     )
                     state = f"Epoch : {epoch} Iter : {i} - Train Loss : {loss.item():.6f}, Test Loss : {test_loss:.6f}, Test mIoU : {100 * test_mIoU:.4f}, Test mpa : {100 * test_mpa:.4f}"
                     print(state)
@@ -171,11 +176,16 @@ class VGG16_LargeFOV:
                             loss=test_loss,
                             mIoU=test_mIoU,
                             mpa=test_mpa,
-                            epoch=epoch,
+                            epoch=epoch * len(train_loader) + i,
                         )
                         print()
                     await self.save_train_log(
-                        epoch, loss, test_loss, test_mIoU, test_mpa, log_path
+                        epoch * len(train_loader) + i,
+                        loss,
+                        test_loss,
+                        test_mIoU,
+                        test_mpa,
+                        log_path,
                     )
             await self.save_checkpoint(
                 save_path=save_path,
