@@ -123,10 +123,16 @@ class VGG16_LargeFOV:
         lr=0.01,
         momentum=0.9,
         weight_decay=0.0005,
+        nesterov=False,
+        create_scheduler=None,
     ):
         # train_data: torch dataset object
         self.optimizer = optim.SGD(
-            self.model.parameters(), lr, momentum=momentum, weight_decay=weight_decay
+            self.model.parameters(),
+            lr,
+            momentum=momentum,
+            weight_decay=weight_decay,
+            nesterov=nesterov,
         )
         if load_path:
             self.load_checkpoint(load_path)
@@ -174,6 +180,9 @@ class VGG16_LargeFOV:
                         test_mpa,
                         log_path,
                     )
+                    if create_scheduler:
+                        scheduler = create_scheduler(self.optimizer)
+                        scheduler.step(test_loss)
             if test_mIoU > self.best_mIoU:
                 print("\n", "*" * 35, "Best mIoU Updated", "*" * 35)
                 print(state)
