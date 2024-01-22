@@ -33,6 +33,10 @@ def rgb2onehot(im: NDArray, colorDict: dict) -> NDArray:
 
 
 def onehot2rgb(im: NDArray, colorDict: dict) -> NDArray:
+    """
+    im: h*2 2d image
+    output: h*w*c 3d rgb iamge
+    """
     arr = np.empty((*im.shape, 3))
     for label, color in enumerate(colorDict.values()):
         arr[im == np.asarray(label)] = np.asarray(color)
@@ -45,10 +49,23 @@ def compute_mean_std(dataloader: DataLoader) -> Tuple:
     for ims, _ in dataloader:
         ims = ims.float()
         mean_rgb.append(ims.mean(axis=(0, 2, 3)))
-        std_rgb.append(ims.std(axis=(0, 2, 3)))  # stdf 计算只是一种近似
+        std_rgb.append(ims.std(axis=(0, 2, 3)))  # std 计算只是一种近似
     mean = torch.stack(mean_rgb).mean(dim=0)
     std = torch.stack(std_rgb).mean(dim=0)
     return mean, std
+
+
+def compute_data_count(mask_dir, color_dict: colorDict):
+    """for all masks in the mark_dir, compute the the pixel num of each class"""
+    mask_list = os.listdir(mask_dir)
+    color_count = {k: 0 for k in color_dict}
+    for mask_path in mask_list:
+        mask_path = os.path.join(mask_dir, mask_path)
+        mask = np.array(Image.open(mask_path))
+        mask = rgb2onehot(mask, color_dict)
+        for i, k in enumerate(color_dict):
+            color_count[k] += np.sum(mask == i)
+    return color_count
 
 
 class LungImageDataset(Dataset):

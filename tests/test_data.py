@@ -1,13 +1,19 @@
 # import sys
 # import os
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-import unittest
-
+import unittest, os
+from functools import reduce
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from Implementation.data import colorDict, compute_mean_std, onehot2rgb, rgb2onehot
+from Implementation.data import (
+    colorDict,
+    compute_mean_std,
+    onehot2rgb,
+    rgb2onehot,
+    compute_data_count,
+)
 
 
 class DataTestCase(unittest.TestCase):
@@ -56,9 +62,15 @@ class DataTestCase(unittest.TestCase):
         # Assert the expected mean and std values
         expected_mean = torch.zeros(3)  # Replace with your expected mean values
         expected_std = torch.ones(3)  # Replace with your expected std values
-        print(mean, std)
+        # print(mean, std)
         self.assertTrue(torch.allclose(mean, expected_mean, atol=5e-2))
         self.assertTrue(torch.allclose(std, expected_std, atol=5e-2))
+
+    def test_compute_data_count(self):
+        mask_dir = "tests/masks"
+        count = compute_data_count(mask_dir, colorDict)
+        num_im = len(os.listdir(mask_dir))
+        self.assertEqual(224 * 224 * num_im, reduce(lambda x, y: x + y, count.values()))
 
 
 if __name__ == "__main__":

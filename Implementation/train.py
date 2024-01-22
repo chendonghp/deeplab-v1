@@ -146,9 +146,7 @@ class VGG16_LargeFOV:
                     )
                 output = self.model(X)
                 output = F.resize(output, (h, w), Image.BILINEAR)
-
                 loss = self.loss_function(output, y)
-
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
@@ -167,18 +165,7 @@ class VGG16_LargeFOV:
                     )
                     state = f"Epoch : {epoch} Iter : {i} - Train Loss : {loss.item():.6f}, Test Loss : {test_loss:.6f}, Test mIoU : {100 * test_mIoU:.4f}, Test mpa : {100 * test_mpa:.4f}"
                     print(state)
-                    if test_mIoU > self.best_mIoU:
-                        print("\n", "*" * 35, "Best mIoU Updated", "*" * 35)
-                        print(state)
-                        self.best_mIoU = test_mIoU
-                        await self.save_checkpoint(
-                            save_path=save_path,
-                            loss=test_loss,
-                            mIoU=test_mIoU,
-                            mpa=test_mpa,
-                            epoch=epoch * len(train_loader) + i,
-                        )
-                        print()
+
                     await self.save_train_log(
                         epoch * len(train_loader) + i,
                         loss,
@@ -187,6 +174,18 @@ class VGG16_LargeFOV:
                         test_mpa,
                         log_path,
                     )
+            if test_mIoU > self.best_mIoU:
+                print("\n", "*" * 35, "Best mIoU Updated", "*" * 35)
+                print(state)
+                self.best_mIoU = test_mIoU
+                await self.save_checkpoint(
+                    save_path=save_path,
+                    loss=test_loss,
+                    mIoU=test_mIoU,
+                    mpa=test_mpa,
+                    epoch=epoch,
+                )
+                print()
             await self.save_checkpoint(
                 save_path=save_path,
                 loss=test_loss,
