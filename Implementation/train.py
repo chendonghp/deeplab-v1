@@ -1,4 +1,5 @@
 import itertools, model, utils
+from pickle import NONE
 
 import tensorboard
 
@@ -134,6 +135,9 @@ class VGG16_LargeFOV:
             weight_decay=weight_decay,
             nesterov=nesterov,
         )
+        scheduler = None
+        if create_scheduler:
+            scheduler = create_scheduler(self.optimizer)
         if load_path:
             self.load_checkpoint(load_path)
             epochs = epochs - self.epoch
@@ -159,7 +163,10 @@ class VGG16_LargeFOV:
 
                 if i % test_freq == 0:
                     test_mIoU, test_loss, test_mpa = self.test(test_loader)
-
+                    scheduler.step(test_loss)
+                    print(
+                        f"Learning rate now at {self.optimizer.param_groups[0]['lr']}."
+                    )
                     writer = SummaryWriter(log_dir=f"{log_path}/runs")
                     writer = self.tensorboard_log(
                         writer,
@@ -180,9 +187,7 @@ class VGG16_LargeFOV:
                         test_mpa,
                         log_path,
                     )
-                    if create_scheduler:
-                        scheduler = create_scheduler(self.optimizer)
-                        scheduler.step(test_loss)
+
             if test_mIoU > self.best_mIoU:
                 print("\n", "*" * 35, "Best mIoU Updated", "*" * 35)
                 print(state)
